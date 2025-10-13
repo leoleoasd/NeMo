@@ -92,21 +92,6 @@ class Qwen2Config1P5B(Qwen2Config):
 
 
 @dataclass
-class Qwen25Config3B(Qwen2Config):
-    """
-    Config for Qwen 2.5 3B: https://huggingface.co/Qwen/Qwen2.5-3B
-    """
-
-    num_layers: int = 36
-    hidden_size: int = 2048
-    num_attention_heads: int = 16
-    num_query_groups: int = 2
-    ffn_hidden_size: int = 11008
-    vocab_size: int = 151936
-    share_embeddings_and_output_weights: bool = True
-
-
-@dataclass
 class Qwen25Config1P5B(Qwen2Config1P5B):
     """
     Config for Qwen 2.5 1.5B: https://huggingface.co/Qwen/Qwen2.5-1.5B
@@ -241,6 +226,9 @@ class HFQwen2Importer(io.ModelConnector["AutoModelForCausalLM", Qwen2Model]):
             "model.norm.weight": "decoder.final_layernorm.weight",
             "lm_head.weight": "output_layer.weight",
         }
+        if getattr(source.config, "tie_word_embeddings", False):
+            # llama 3.2 1B and 3B models have no shared input output embeddings
+            del mapping["lm_head.weight"]
 
         transforms = [
             io.state_transform(
@@ -294,7 +282,7 @@ class HFQwen2Importer(io.ModelConnector["AutoModelForCausalLM", Qwen2Model]):
             gated_linear_unit=True,
             make_vocab_size_divisible_by=128,
             rotary_base=source.rope_theta,
-            share_embeddings_and_output_weights=False,
+            share_embeddings_and_output_weights=source.tie_word_embeddings,
             vocab_size=source.vocab_size,
             seq_length=source.max_position_embeddings,
             fp16=(dtype_from_hf(source) == torch.float16),
@@ -322,7 +310,12 @@ class HFQwen2Exporter(io.ModelConnector[Qwen2Model, "AutoModelForCausalLM"]):
         target = self.convert_state(source, target)
 
         target = target.cpu()
-        target.save_pretrained(output_path)
+        if self.config.tie_word_embeddings:
+            state_dict = target.state_dict()
+            state_dict.pop("lm_head.weight")
+            target.save_pretrained(output_path, state_dict=state_dict)
+        else:
+            target.save_pretrained(output_path)
         self.tokenizer.save_pretrained(output_path)
 
         return output_path
@@ -365,12 +358,16 @@ class HFQwen2Exporter(io.ModelConnector[Qwen2Model, "AutoModelForCausalLM"]):
                 target_key="model.embed_tokens.weight",
                 fn=TransformFns.prune_padding,
             ),
-            io.state_transform(
-                source_key="output_layer.weight",
-                target_key="lm_head.weight",
-                fn=TransformFns.prune_padding,
-            ),
         ]
+        
+        if not self.config.tie_word_embeddings:
+            transforms.append(
+                io.state_transform(
+                    source_key="output_layer.weight",
+                    target_key="lm_head.weight",
+                    fn=TransformFns.prune_padding,
+                ),
+            )
         return io.apply_transforms(
             source,
             target,
@@ -406,7 +403,7 @@ class HFQwen2Exporter(io.ModelConnector[Qwen2Model, "AutoModelForCausalLM"]):
             rope_theta=source.rotary_base,
             vocab_size=getattr(source, 'vocab_size', self.tokenizer.vocab_size),
             sliding_window=source.seq_length,
-            tie_word_embeddings=False,
+            tie_word_embeddings=source.share_embeddings_and_output_weights,
         )
 
 
@@ -414,7 +411,6 @@ __all__ = [
     "Qwen2Config",
     "Qwen2Config500M",
     "Qwen2Config1P5B",
-    "Qwen25Config3B",
     "Qwen2Config7B",
     "Qwen2Config72B",
     "Qwen25Config500M",
