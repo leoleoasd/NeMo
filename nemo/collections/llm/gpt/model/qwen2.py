@@ -89,6 +89,7 @@ class Qwen2Config1P5B(Qwen2Config):
     num_attention_heads: int = 12
     num_query_groups: int = 2
     ffn_hidden_size: int = 8960
+    share_embeddings_and_output_weights: Optional[bool] = True
 
 
 @dataclass
@@ -98,6 +99,21 @@ class Qwen25Config1P5B(Qwen2Config1P5B):
     """
 
     seq_length: int = 131072
+
+
+@dataclass
+class Qwen25Config3B(Qwen2Config):
+    """
+    Config for Qwen 2.5 3B: https://huggingface.co/Qwen/Qwen2.5-3B
+    """
+
+    num_layers: int = 36
+    hidden_size: int = 2048
+    num_attention_heads: int = 16
+    num_query_groups: int = 2
+    ffn_hidden_size: int = 11008
+    vocab_size: int = 151936
+    share_embeddings_and_output_weights: bool = True
 
 
 @dataclass
