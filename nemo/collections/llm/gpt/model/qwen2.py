@@ -375,7 +375,7 @@ class HFQwen2Exporter(io.ModelConnector[Qwen2Model, "AutoModelForCausalLM"]):
                 fn=TransformFns.prune_padding,
             ),
         ]
-        
+
         if not self.config.tie_word_embeddings:
             transforms.append(
                 io.state_transform(
