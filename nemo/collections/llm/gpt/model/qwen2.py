@@ -316,6 +316,7 @@ class HFQwen2Exporter(io.ModelConnector[Qwen2Model, "AutoModelForCausalLM"]):
     def init(self, dtype=torch.bfloat16) -> "AutoModelForCausalLM":
         from transformers import AutoModelForCausalLM
         from transformers.modeling_utils import no_init_weights
+        dtype = torch.float32
 
         with no_init_weights():
             return AutoModelForCausalLM.from_config(self.config, trust_remote_code=True, torch_dtype=dtype)
